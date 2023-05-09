@@ -4,6 +4,11 @@ This repository provides an extension to IPdb to enable sub-expression stepping,
 
 DISCLAMER: This project is still in an experimental status and there is probably many gotchas that are not yet tackled.
 
+## Dependencies
+
+* gcc and python headers for the C extension
+* `ipdb` (`pip install ipdb`) for the base debugger
+
 ## Extra commands
 
 * `stepe`, steps until the next sub-expression
