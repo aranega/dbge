@@ -12,11 +12,7 @@ DISCLAMER: This project is still in an experimental status and there is probably
 * `capturetopstack [arg]`, let you capture the top of the evaluation stack and place it in `arg` (`_topstack` if `arg` is not set) in the global context attached to the debugged frame.
 * `forcetopstack arg`, forces the top of the evaluation stack to `arg` (experimental!)
 
-
-## Demo videos
-
-
-## How to test the "example.py"
+## How to test the "example.py"
 
 The project is not yet on pypi (not sure it will be one day) as it's experimental and contains a C extension.
 
@@ -33,3 +29,6 @@ make   # requires the cpython dev package installed, as well as gcc
 ```
 3. run the `example.py` or set `import dbge; dgbe.set_trace()` where you want in your code.
 
+## Demo videos
+
+https://github.com/aranega/dbge/assets/2317394/a8031a3a-f336-44ee-b3e6-335b5ee1b2ec
