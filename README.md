@@ -36,4 +36,4 @@ make   # requires the cpython dev package installed, as well as gcc
 
 ## Demo videos
 
-https://github.com/aranega/dbge/assets/2317394/a8031a3a-f336-44ee-b3e6-335b5ee1b2ec
+https://github.com/aranega/dbge/assets/2317394/9739d0e5-ee7a-4270-a387-f38358b227a2
