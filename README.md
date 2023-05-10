@@ -62,8 +62,7 @@ make   # requires the cpython dev package installed, as well as gcc
 
 ## Demo videos
 
-General use of `stepi`, `stepe`, `until_expr`, `forcetopstack` and `capturetopstack`:
-https://github.com/aranega/dbge/assets/2317394/9739d0e5-ee7a-4270-a387-f38358b227a2
+| General use of `stepi`, `stepe`, `until_expr`, `forcetopstack` and `capturetopstack` | Use of expression breakpoint with `be` |
+:-------------------------:|:-------------------------:
+<video src="https://github.com/aranega/dbge/assets/2317394/9739d0e5-ee7a-4270-a387-f38358b227a2">  | <video src="https://github.com/aranega/dbge/assets/2317394/b127bb9b-3ee7-492b-8054-c7ada6708d59">
 
-
-Use of `be`:
