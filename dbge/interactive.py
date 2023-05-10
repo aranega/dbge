@@ -2,6 +2,7 @@ import ast
 import curses
 import sys
 
+
 def traverse_ast(node):
     yield node
     for child in ast.iter_child_nodes(node):

@@ -1,4 +1,4 @@
-from dbge.dbge import AST2Bytecode
+from dbge.ast2bytecode import AST2Bytecode
 
 
 def example():
