@@ -147,17 +147,17 @@ class MyPdb(ipdb.__main__._get_debugger_cls()):
         if self.quitting:
             return # None
         if event == 'opcode':
-            return self.dispatch_opcode(frame, arg)
+            return self.dispatch_opcode(frame)
         return super().trace_dispatch(frame, event, arg)
 
-    def dispatch_opcode(self, frame, arg):
+    def dispatch_opcode(self, frame):
         a2b: AST2Bytecode = self.framea2b[frame]
         bytecode = a2b.get_bytecode(offset=frame.f_lasti)
         self.curbytecode = bytecode
-        self.user_opcode(frame, arg, bytecode)
+        self.user_opcode(frame, bytecode)
         return self.trace_dispatch
 
-    def user_opcode(self, frame, arg, bytecode: dis.Instruction):
+    def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
             print(f"Current stack top:       {frame_access.peek_topstack(frame)}")
             print(f"Next bytecode:           {bytecode.opcode} {bytecode.opname}\t(offset={bytecode.offset})")
