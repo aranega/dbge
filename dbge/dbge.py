@@ -97,23 +97,11 @@ class AST2Bytecode(object):
         bc = self.get_bytecode(offset)
         return bc.ast if bc else None
 
-    # def resolve_next_offset(self, offset):
-    #     bc = self.get_bytecode(offset)
-    #     nbc = self.next_bytecode(bc)
-    #     if not nbc:
-    #         return 0
-    #     node = nbc.ast
-    #     insts = node.insts if node else [None]
-    #     return insts[-1].offset
-
     def resolve_end_offset(self, offset):
         bc = self.get_bytecode(offset)
         node = bc.ast
         insts = node.insts if node else [None]
         return insts[-1].offset if insts[-1] else offset
-
-    # def resolve_next_astnode(self, offset):
-    #     return self.get_bytecode(self.next_bytecode(self.get_bytecode(offset))).ast
 
 
 class MyPdb(ipdb.__main__._get_debugger_cls()):
@@ -123,6 +111,7 @@ class MyPdb(ipdb.__main__._get_debugger_cls()):
         self.stopbytecodeno = -1
         self.framea2b = {}
         self.forced = None
+        self.codeobj_registry = {}
 
     def set_trace(self, frame=None):
         """Start debugging from frame.
@@ -216,7 +205,11 @@ class MyPdb(ipdb.__main__._get_debugger_cls()):
         return False
 
     def setup_frame_ast2bytecode(self, frame):
-        self.framea2b[frame] = AST2Bytecode(frame.f_code)
+        codeobj = frame.f_code
+        a2b = self.codeobj_registry.get(codeobj)
+        if not a2b:
+            a2b = AST2Bytecode(codeobj)
+        self.framea2b[frame] = a2b
 
     def do_capturetopstack(self, arg):
         if not arg:
