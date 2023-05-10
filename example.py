@@ -1,6 +1,7 @@
 class A(object):
-    def __init__(self, x):
-        self.x = 8
+    def __init__(self, name, x):
+        self.name = name
+        self.x = x
 
     def compute(self, other):
         c = other.x + self.x
@@ -12,11 +13,11 @@ def example(a):
     return c
 
 
-a = A(55)
-a2 = A(100)
+a1 = A("a1", 55)
+a2 = A("a2", 100)
 
 import dbge; dbge.set_trace()
 
-print("Result 1", a.compute(a2))
+print("Result 1", a1.compute(a2))
 print("Result 2", a2.compute(a2))
 print("Result 3", example(5) + 4)
