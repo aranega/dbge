@@ -7,6 +7,7 @@ import ipdb
 
 from .frame_access import frame_access
 from .interactive import select_astnode
+from .ast2bytecode import AST2Bytecode
 
 
 def set_trace():
@@ -21,6 +22,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.framea2b = {}
         self.forced = None
         self.codeobj_registry = {}
+        self.exprbreakpoints = []
 
     # Copy/modified from Pdb
     def set_trace(self, frame=None):
@@ -65,6 +67,45 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         if self.stop_bytecode_here(frame):
             self.stopbytecodeno = -1
             self.interaction(frame, None)
+        for breakpoint in self.exprbreakpoints:
+            if breakpoint.break_here(frame, bytecode):
+                self.interaction(frame, None)
+
+    def break_here(self, frame):
+        br = super().break_here(frame)
+        if br:
+            return True
+        return self.exprbreak_here(frame)
+
+    def exprbreak_here(self, frame):
+        for breakpoint in self.exprbreakpoints:
+            if breakpoint.break_here(frame, self.curbytecode):
+                return True
+        return False
+
+    def break_anywhere(self, frame):
+        res = super().break_anywhere(frame)
+        if res:
+            return res
+        for breakpoint in self.exprbreakpoints:
+            if breakpoint.a2b.codeobj is frame.f_code:
+                return True
+        return False
+
+    def set_continue(self):
+        """Stop only at breakpoints or when finished.
+
+        If there are no breakpoints, set the system trace function to None.
+        """
+        # Don't stop except at breakpoints or when finished
+        self._set_stopinfo(self.botframe, None, -1)
+        if not self.breaks and not self.exprbreakpoints:
+            # no breakpoints; run without debugger overhead
+            sys.settrace(None)
+            frame = sys._getframe().f_back
+            while frame and frame is not self.botframe:
+                del frame.f_trace
+                frame = frame.f_back
 
     def user_call(self, frame, arg):
         frame.f_trace_opcodes = True  # Activate trace opcode in new frame
@@ -118,6 +159,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         a2b = self.codeobj_registry.get(codeobj)
         if not a2b:
             a2b = AST2Bytecode(codeobj)
+            self.codeobj_registry[codeobj] = a2b
         return a2b
 
     def setup_frame_ast2bytecode(self, frame):
@@ -148,15 +190,19 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         frame = self.curframe
         if "." in arg:
             obj, attr = arg.rsplit(".", maxsplit=1)
-            resolved = eval(obj, frame.f_globals, frame.f_locals)
-            resolved = getattr(resolved, attr)
+            obj = eval(obj, frame.f_globals, frame.f_locals)
+            resolved = getattr(obj, attr)
         else:
+            obj = None
             resolved = eval(arg, frame.f_globals, frame.f_locals)
         codeobj = resolved.__code__
 
         a2b = self.setup_ast2bytecode(codeobj)
         node, bc = select_astnode(a2b)
-        print("Selected", node, bc)
+        instance = obj if not isinstance(obj, type) else None
+        expb = ExpressionBreakpoint(a2b, node, bc, instance=instance)
+        self.exprbreakpoints.append(expb)
+        print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] '{ast.unparse(node)}'")
         return 0
 
     def _Pdb__format_line(self, tpl_line, filename, lineno, line, arrow=False):
@@ -166,3 +212,21 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             end = node.end_col_offset
             line = f"{line[:start]}<{line[start: end]}>{line[end:]}"
         return super()._Pdb__format_line(tpl_line, filename, lineno, line, arrow)
+
+
+class ExpressionBreakpoint(object):
+    def __init__(self, a2b, node, bc, instance=None):
+        self.a2b: AST2Bytecode = a2b
+        self.node = node
+        self.bc = bc
+        self.instance = instance
+
+    def break_here(self, frame, bc):
+        codeobj = frame.f_code
+        if self.instance:
+            self_name = codeobj.co_varnames[0] if codeobj.co_argcount > 0 else ""
+            current_instance = frame.f_locals.get(self_name, None)
+            on_instance = self.instance is current_instance
+        else:
+            on_instance = True
+        return self.a2b.codeobj is codeobj and bc.ast is self.node and on_instance

@@ -11,9 +11,12 @@ def example(a):
     c = 4 + b + a
     return c
 
-import dbge; dbge.set_trace()
 
 a = A(55)
 a2 = A(100)
+
+import dbge; dbge.set_trace()
+
 print("Result 1", a.compute(a2))
-print("Result 2", example(5) + 4)
+print("Result 2", a2.compute(a2))
+print("Result 3", example(5) + 4)
