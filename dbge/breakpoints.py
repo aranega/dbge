@@ -22,6 +22,9 @@ class ExpressionBreakpoint(object):
         if bc.ast is not self.node:
             return False
 
+        if bc.ast.insts[0] is not bc:
+            return False
+
         codeobj = frame.f_code
         if self.instance:
             # We get the current object "self"
