@@ -13,10 +13,10 @@ class ExpressionBreakpoint(object):
         self.instance = instance
 
     def should_break(self, frame):
-        return self.a2b.codeobj is frame.f_codeobj
+        return self.a2b.codeobj is frame.f_code
 
     def break_here(self, frame, bc):
-        if self.a2b.codeobj is not frame.f_codeobj:
+        if self.a2b.codeobj is not frame.f_code:
             return False
 
         if bc.ast is not self.node:
