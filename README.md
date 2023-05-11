@@ -1,6 +1,6 @@
 # DbgE: Debugger with granularity of (sub-)expression
 
-This repository provides an extension to IPdb to enable sub-expression stepping, bytecode stepping and some stack manipulation.
+This repository provides an extension to IPdb to enable sub-expression stepping, bytecode stepping, advanced breakpoints and some stack manipulation.
 
 DISCLAMER: This project is still in an experimental status and there is probably many gotchas that are not yet tackled.
 
@@ -15,8 +15,11 @@ DISCLAMER: This project is still in an experimental status and there is probably
 * `stepi`, steps until the next bytecode
 * `until_expr`, let you interactively select an expression in the current debugged frame and run the execution until before the execution of this expression
 * `be expr`, let you interactively select an expression in the function pointed by `expr` and sets a breakpoint there. The argument `expr` has to resolve to a function/method.
+* `breakattributeread [<mode>:]<expr>.<attr_name>`, set a breakpoint on all attribute read access of a particular instance (see note for more details about modes).
+* `breakattributewrite [<mode>:]<expr>.<attr_name>`, set a breakpoint on all attribute write access of a particular instance (see note for more details about modes).
 * `capturetopstack [arg]`, let you capture the top of the evaluation stack and place it in `arg` (`_topstack` if `arg` is not set) in the global context attached to the debugged frame.
 * `forcetopstack arg`, forces the top of the evaluation stack to `arg` (experimental!)
+
 
 ### Note about `be`
 
@@ -42,6 +45,19 @@ In the debugger, calling `be A.compute` will let you set a breakpoint on an expr
 Consequently, the execution will break before the execution of the selected sub-expression when `a1.compute()` and `a2.compute()` will be executed.
 However, calling `be a2.compute` will let you set a breakpoint on an expression inside of `compute` that will trigger only when `compute` will be executed for `a2`.
 This enables a first object-centric breakpoint type.
+
+### Note about `breakattribute[read/write]`
+
+Those two commands let you set a breakpoint for a dedicated instance (object-centric breakpoint) that will activate on an attribute access (read or write).
+The command argument format is `[<mode>:]<expr>.<attr_name>`, and each part where:
+
+* `<expr>` is an expression that needs to resolve to an object (e.g: in `example.py`, it could be `a1` or any other complex expression that resolve to an object accessible from the frame being debugged).
+* `<attr_name>` is the name of the attribute to break to, e.g: `a1.name` would consider the attribute `name` of the instance `a1`.
+* `<mode>` is in which "situation" the breakpoint should activate. It can be:
+    * `internal` (or `i`): it will activate only on an attribute read/write that is performed in a method of the instance itself
+    * `external` (or `e`): it will activate only on an attribute read/write that is performed "outside" of the instance (another object in another methode/function access or modifies the attribute)
+    * `both` (or `b`): the default value if `mode` is not set. It will activate on an attribute read/write performed "inside" or "outside" of the instance.
+
 
 ## How to test the "example.py"
 
