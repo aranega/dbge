@@ -171,7 +171,8 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         a2b = self.codeobj_registry.get(codeobj)
         if not a2b:
             a2b = AST2Bytecode(codeobj)
-            self.codeobj_registry[codeobj] = a2b
+            for m in a2b.all_a2b():
+                self.codeobj_registry[m.codeobj] = m
         return a2b
 
     def setup_frame_ast2bytecode(self, frame):
@@ -233,10 +234,10 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             resolved = eval(arg, frame.f_globals, frame.f_locals)
         codeobj = resolved.__code__
 
-        a2b = self.setup_ast2bytecode(codeobj)
-        node, bc = select_astnode(a2b)
+        from_a2b = self.setup_ast2bytecode(codeobj)
+        node, bc, mapper = select_astnode(from_a2b)
         instance = obj if not isinstance(obj, type) else None
-        expb = ExpressionBreakpoint(a2b, node, bc, instance=instance)
+        expb = ExpressionBreakpoint(mapper, node, bc, instance=instance)
         self.exprbreakpoints.append(expb)
         print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] '{ast.unparse(node)}'")
         return 0

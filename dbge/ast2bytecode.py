@@ -4,9 +4,15 @@ import inspect
 
 
 class AST2Bytecode(object):
-    def __init__(self, codeobj):
+    def __init__(self, codeobj, _ast=None, _flat_ast=None, _indent=None):
         self.codeobj = codeobj
-        self.ast, self.flat_ast = self._setup_ast()
+        self.sub_a2bs = []
+        if _ast:
+            self.ast = _ast
+            self.flat_ast = _flat_ast
+            self.indent = _indent
+        else:
+            self.ast, self.flat_ast, self.indent = self._setup_ast()
         self.bytecodes = self._setup_bytecodes()
 
     @staticmethod
@@ -27,7 +33,6 @@ class AST2Bytecode(object):
         nodes = []
         codeobj = self.codeobj
         code, indent = self.dedent_string(inspect.getsource(codeobj))
-        self.indent = indent
 
         tree = ast.parse(code, inspect.getsourcefile(codeobj), "exec")
         for node in ast.walk(tree):
@@ -40,17 +45,22 @@ class AST2Bytecode(object):
 
         root = tree.body[0]
         ast.increment_lineno(root, inspect.getsourcelines(codeobj)[1] - 1)
-        return (root, nodes)
+        return (root, nodes, indent)
 
     def _setup_bytecodes(self):
         insts = []
         codeobj = self.codeobj
         for inst in dis.get_instructions(codeobj):
             insts.append(inst)
+            argval = inst.argval
+            if inst.opname == "LOAD_CONST" and inspect.iscode(argval) and "<locals>" in argval.co_qualname:
+                suba2b = AST2Bytecode(argval, self.ast, self.flat_ast, self.indent)
+                self.sub_a2bs.append(suba2b)
             for node in self.flat_ast:
                 other = dis.Positions(node.lineno, node.end_lineno, node.col_offset, node.end_col_offset)
                 if self.match(inst.positions, other):
                     inst.ast = node
+                    inst.mapper = self
                     node.insts.append(inst)
                     break
             else:
@@ -80,3 +90,8 @@ class AST2Bytecode(object):
         node = bc.ast
         insts = node.insts if node else [None]
         return insts[-1].offset if insts[-1] else offset
+
+    def all_a2b(self):
+        yield self
+        for sub in self.sub_a2bs:
+            yield from sub.all_a2b()

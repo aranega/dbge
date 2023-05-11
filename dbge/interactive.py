@@ -88,7 +88,8 @@ def _display(stdscr, a2b):
             return None, None
         elif key in (curses.KEY_ENTER, 10, 13):
             node = all_nodes[index]
-            return node, node.insts[0]
+            inst = node.insts[0]
+            return node, inst, inst.mapper
 
         # Redraw the AST
         stdscr.clear()
