@@ -5,9 +5,11 @@ import sys
 
 import ipdb
 
+from .ast2bytecode import AST2Bytecode
+from .breakpoints import (AttributeReadBreakpoint, AttributeWriteBreakpoint,
+                          ExpressionBreakpoint)
 from .frame_access import frame_access
 from .interactive import select_astnode
-from .ast2bytecode import AST2Bytecode
 
 
 def set_trace():
@@ -44,6 +46,16 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.set_step()
         sys.settrace(self.trace_dispatch)
 
+    # Copy/modified from IPdb
+    def _Pdb__format_line(self, tpl_line, filename, lineno, line, arrow=False):
+        node = self.curbytecode.ast if self.curbytecode.ast else None
+        if node and lineno == node.lineno:
+            start = node.col_offset
+            end = node.end_col_offset
+            line = f"{line[:start]}<{line[start: end]}>{line[end:]}"
+        return super()._Pdb__format_line(tpl_line, filename, lineno, line, arrow)
+
+    # Extends trace function to listen to opcode events
     def trace_dispatch(self, frame, event, arg):
         if self.quitting:
             return # None
@@ -88,7 +100,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         if res:
             return res
         for breakpoint in self.exprbreakpoints:
-            if breakpoint.a2b.codeobj is frame.f_code:
+            if breakpoint.should_break(frame):
                 return True
         return False
 
@@ -182,6 +194,30 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self._set_stopinfo_bytecode(frame, None, offset_stop=bc.offset)
         return 1
 
+    def _attribute_bp(self, frame, str_expr, bpoint_class):
+        # refactor me
+        if not str_expr:
+            print("!! an expression with the form <expr>.attr is expected")
+            return (None, None, None, None)
+        if "." not in str_expr:
+            print("!! an expression with the form <expr>.attr is expected")
+            return None
+        if ":" in str_expr:
+            args = [s.strip() for s in str_expr.split(":") if s]
+            if len(args) != 2:
+                print("!! mode or expression is missing.\n"
+                      "The argument must have the form <mode>:<expr>.attr\n"
+                      "Were <mode> is 'both' or 'b', 'internal' or 'i', 'external' or 'e'")
+                return (None, None, None, None)
+            mode, str_expr = args
+        else:
+            mode = "both"
+        frame = self.curframe
+        obj, attr = str_expr.rsplit(".", maxsplit=1)
+        resolved = eval(obj, frame.f_globals, frame.f_locals)
+
+        return resolved, attr, bpoint_class(resolved, attr, mode=mode), mode
+
     def do_be(self, arg):
         if not arg:
             print("!! an expression towards the function or the method to stop to is required")
@@ -205,28 +241,16 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] '{ast.unparse(node)}'")
         return 0
 
-    def _Pdb__format_line(self, tpl_line, filename, lineno, line, arrow=False):
-        node = self.curbytecode.ast if self.curbytecode.ast else None
-        if node and lineno == node.lineno:
-            start = node.col_offset
-            end = node.end_col_offset
-            line = f"{line[:start]}<{line[start: end]}>{line[end:]}"
-        return super()._Pdb__format_line(tpl_line, filename, lineno, line, arrow)
+    def do_breakattributewrite(self, arg):
+        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, AttributeWriteBreakpoint)
+        if breakpoint:
+            self.exprbreakpoints.append(breakpoint)
+            print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] breaks on attribute write for {resolved}.{attr} <mode={mode}>")
+        return 0
 
-
-class ExpressionBreakpoint(object):
-    def __init__(self, a2b, node, bc, instance=None):
-        self.a2b: AST2Bytecode = a2b
-        self.node = node
-        self.bc = bc
-        self.instance = instance
-
-    def break_here(self, frame, bc):
-        codeobj = frame.f_code
-        if self.instance:
-            self_name = codeobj.co_varnames[0] if codeobj.co_argcount > 0 else ""
-            current_instance = frame.f_locals.get(self_name, None)
-            on_instance = self.instance is current_instance
-        else:
-            on_instance = True
-        return self.a2b.codeobj is codeobj and bc.ast is self.node and on_instance
+    def do_breakattributeread(self, arg):
+        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, AttributeReadBreakpoint)
+        if breakpoint:
+            self.exprbreakpoints.append(breakpoint)
+            print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] breaks on attribute read for {resolved}.{attr} <mode={mode}>")
+        return 0
