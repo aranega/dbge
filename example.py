@@ -14,13 +14,13 @@ class A(object):
 
 
 def example(ainst):
-    def inner():
-        print("rffff")
+    # def inner():
+    #     print("rffff")
     b = ainst.x + 6
     c = 4 + b + ainst.x
     print("Val", ainst.name)
     x = [z + 4 for z in range(5)]
-    inner()
+    # inner()
     return x[0]
     # if c - 120 == 0:
     #     c = c + 6

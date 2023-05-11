@@ -1,5 +1,6 @@
 import ast
 import curses
+import inspect
 import sys
 
 
@@ -15,32 +16,23 @@ def _traverse_ast(node):
     yield node
 
 
-def draw_tree(stdscr, node, selected=None, indent=0):
+def display_code(stdscr, code_str, line_shift, selected=None, indent=0):
     # Set the colors
-    if selected is None:
-        stdscr.attron(curses.color_pair(1))
-    elif node is selected:
-        stdscr.attron(curses.color_pair(2))
-    else:
-        stdscr.attron(curses.color_pair(1))
-
-    shift = node.lineno
+    stdscr.attron(curses.color_pair(1))
 
     # Draw the node
-    if hasattr(node, "lineno"):
-        stdscr.addstr(node.lineno - shift, node.col_offset - indent, ast.unparse(node))
-    else:
-        stdscr.addstr(0, 0, ast.unparse(node))
+    stdscr.addstr(0, 0, code_str)
 
+    # Draw the selection
     stdscr.attron(curses.color_pair(2))
-    stdscr.addstr(selected.lineno - shift, selected.col_offset - indent, ast.unparse(selected))
+    stdscr.addstr(selected.lineno - line_shift, selected.col_offset - indent, ast.unparse(selected))
 
     # Reset the colors
     stdscr.attroff(curses.color_pair(1))
     stdscr.attroff(curses.color_pair(2))
 
 
-def draw_node(stdscr, node):
+def display_node_info(stdscr, node):
     stdscr.addstr(0, 0, repr(node))
     stdscr.addstr(1, 0, ast.unparse(node))
 
@@ -68,22 +60,31 @@ def _display(stdscr, a2b):
 
     # Draw the AST
     node = all_nodes[index]
-    draw_tree(tree_win, tree, selected=node, indent=a2b.indent)
-    draw_node(node_win, node)
+    src_code = inspect.getsource(a2b.codeobj)
+    display_code(tree_win, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
+    display_node_info(node_win, node)
 
     while True:
         key = stdscr.getch()
         if key in (curses.KEY_LEFT, curses.KEY_RIGHT):
             incr = 1 if key == curses.KEY_RIGHT else -1
             index = (index + incr) % limit
-        # elif key in (curses.KEY_DOWN, curses.KEY_UP):
-            # incr = 1 if key == curses.KEY_DOWN else -1
-            # for i, node in enumerate(all_nodes, start=(index + incr) % limit):
-            #     if isinstance(node, ast.stmt):
-            #         index = i
-            #         break
-            # else:
-            #     index = (index + incr) % limit
+        elif key == curses.KEY_DOWN:
+            current_line = all_nodes[index].lineno
+            for i, node in enumerate(all_nodes):
+                if node.lineno > current_line:
+                    index = i
+                    break
+            else:
+                index = (index + 1) % limit
+        elif key == curses.KEY_UP:
+            current_line = all_nodes[index].lineno
+            for i, node in reversed(list(enumerate(all_nodes))):
+                if node.lineno < current_line:
+                    index = i
+                    break
+            else:
+                index = (index - 1) % limit
         elif key == ord("q"):
             return None, None
         elif key in (curses.KEY_ENTER, 10, 13):
@@ -94,8 +95,8 @@ def _display(stdscr, a2b):
         # Redraw the AST
         stdscr.clear()
         node = all_nodes[index]
-        draw_tree(tree_win, tree, selected=node, indent=a2b.indent)
-        draw_node(node_win, node)
+        display_code(tree_win, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
+        display_node_info(node_win, node)
         stdscr.refresh()
 
 
