@@ -19,7 +19,7 @@ def example(ainst):
     b = ainst.x + 6
     c = 4 + b + ainst.x
     print("Val", ainst.name)
-    x = [z + 4 for z in range(5)]
+    x = [z + ainst.x for z in range(5)]
     inner()
     return x[0]
     # if c - 120 == 0:

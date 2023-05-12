@@ -45,8 +45,8 @@ def _display(stdscr, a2b):
     curses.init_pair(2, curses.COLOR_GREEN, -1)
 
     # Set up the tree and node window
-    tree_win = stdscr.subwin(curses.LINES, curses.COLS // 2, 0, 0)
-    node_win = stdscr.subwin(curses.LINES, curses.COLS // 2, 0, curses.COLS // 2)
+    # tree_win = stdscr.subwin(curses.LINES, curses.COLS // 2, 0, 0)
+    # node_win = stdscr.subwin(curses.LINES, curses.COLS // 2, 0, curses.COLS // 2)
 
     # Gets the ast from the AST2Bytecode instance
     tree = a2b.ast
@@ -61,8 +61,8 @@ def _display(stdscr, a2b):
     # Draw the AST
     node = all_nodes[index]
     src_code = inspect.getsource(a2b.codeobj)
-    display_code(tree_win, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
-    display_node_info(node_win, node)
+    display_code(stdscr, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
+    # display_node_info(node_win, node)
 
     while True:
         key = stdscr.getch()
@@ -95,8 +95,8 @@ def _display(stdscr, a2b):
         # Redraw the AST
         stdscr.clear()
         node = all_nodes[index]
-        display_code(tree_win, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
-        display_node_info(node_win, node)
+        display_code(stdscr, src_code, selected=node, indent=a2b.indent, line_shift=tree.lineno)
+        # display_node_info(node_win, node)
         stdscr.refresh()
 
 

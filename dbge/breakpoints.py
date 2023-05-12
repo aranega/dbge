@@ -22,12 +22,16 @@ class ExpressionBreakpoint(object):
         if bc.ast is not self.node:
             return False
 
+        # We only stop in the first bc associated to the node
+        # not the others
         if bc.ast.insts[0] is not bc:
             return False
 
         codeobj = frame.f_code
         if self.instance:
             # We get the current object "self"
+            # if we call this BP on an instance, it means we are in the context
+            # of a method call (or we need to constraint that)
             self_name = codeobj.co_varnames[0] if codeobj.co_argcount > 0 else ""
             current_instance = frame.f_locals.get(self_name, None)
             on_instance = self.instance is current_instance
