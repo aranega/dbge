@@ -188,7 +188,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
     def do_until_expr(self, arg):
         frame = self.curframe
         a2b = self.framea2b[frame]
-        node, bc = select_astnode(a2b)
+        node, bc, _ = select_astnode(a2b)
         if not node:
             return 0
         print("!! Will stop before", ast.unparse(node))
