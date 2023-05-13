@@ -62,7 +62,13 @@ static PyObject *frame_peek_topstack(PyObject *self, PyObject *pyframe)
     PyFrameObject *frame = (PyFrameObject *)pyframe;
     PyObject *res = STACKTOP(frame);
     // Py_XINCREF(res);  // This probably introduces a memory leak
-    return !res ? Py_BuildValue("") : res;
+    if (res == NULL) {
+        return Py_BuildValue("s", "(nil)");
+    }
+    PyObject *weakref = PyWeakref_NewRef(res, NULL);
+    PyErr_Clear();
+    return weakref == NULL ? res : weakref;
+    // return !res ? Py_BuildValue("") : res;
 }
 
 // static PyObject *frame_decrease(PyObject *self, PyObject *obj)

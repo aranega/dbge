@@ -1,5 +1,6 @@
 import dis
 from multiprocessing import context
+import weakref
 
 from .ast2bytecode import AST2Bytecode
 from .frame_access import frame_access
@@ -97,6 +98,8 @@ class AttributeBasedBreakpoint(BytecodeBasedBreakpoint):
 
         # Get the TOS
         tos = frame_access.peek_topstack(frame)
+        if isinstance(tos, weakref.ReferenceType):
+            tos = tos()
         return context_ok and self.instance is tos
 
 

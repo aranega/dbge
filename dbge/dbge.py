@@ -12,6 +12,8 @@ from .breakpoints import (AttributeReadBreakpoint, AttributeWriteBreakpoint,
 from .frame_access import frame_access
 from .interactive import select_astnode
 
+import weakref
+
 
 def set_trace():
     DbgE().set_trace(inspect.currentframe().f_back)
@@ -27,6 +29,12 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.codeobj_registry = {}
         self.exprbreakpoints = []
 
+    def get_tos(self, frame):
+        tos = frame_access.peek_topstack(frame)
+        if isinstance(tos, weakref.ReferenceType):
+            tos = tos()
+        return tos
+
     # Copy/modified from Bdb
     def set_continue(self):
         """Stop only at breakpoints or when finished.
@@ -35,7 +43,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         """
         # Don't stop except at breakpoints or when finished
         self._set_stopinfo(self.botframe, None, -1)
-        if not self.breaks and not self.exprbreakpoints and not self.framea2b.get(self.curframe):
+        if not self.breaks and not self.exprbreakpoints and False:
             # no breakpoints; run without debugger overhead
             sys.settrace(None)
             frame = sys._getframe().f_back
@@ -89,10 +97,16 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
-            tos = frame_access.peek_topstack(frame)
-            forced = self.forced.setdefault(frame, [])
-            if tos and tos not in forced :
-                forced.append(tos)
+            tos_ref = frame_access.peek_topstack(frame)
+            # forced = self.forced.setdefault(frame, [])
+            # if tos and tos not in forced :
+            #     forced.append(tos)
+            if isinstance(tos_ref, weakref.ReferenceType):
+                tos = tos_ref()
+                if tos is None:
+                    print("TOS deallocated")
+            else:
+                tos = tos_ref
             print(f"Current stack top:       {tos}")
             print(f"Next bytecode:           {bytecode.opcode} {bytecode.opname}\t(offset={bytecode.offset})")
             if bytecode.ast:
@@ -129,14 +143,17 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         frame.f_trace_opcodes = True  # Activate trace opcode in new frame
         # frame.f_trace = self.trace_dispatch
         self.setup_frame_ast2bytecode(frame)
+        # weakref.finalize(frame, self.remove_mapper_entry, frame)
         super().user_call(frame, arg)
 
-    def dispatch_return(self, frame, arg):
+    def remove_mapper_entry(self, frame):
         # The frame exeuction is finished we clear forced values and frames
         del self.framea2b[frame]
-        forced = self.forced.get(frame, [])
-        # self._get_frame_locals(frame).clear()
-        forced.clear() # The frame execution is finished, we clear all forced values
+        self.forced.get(frame, []).clear()
+        self.curframe_locals.clear()
+
+    def dispatch_return(self, frame, arg):
+        self.remove_mapper_entry(frame)
         return super().dispatch_return(frame, arg)
 
     def _set_stopinfo_bytecode(self, stopframe, returnframe, offset_stop=0):
@@ -166,11 +183,11 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             print("Missing argument")
             return
         frame = self.curframe
-        print(f"Replace top stack:    {frame_access.peek_topstack(frame)}")
+        print(f"Replace top stack:    {self.get_tos(frame)}")
         obj = eval(arg, frame.f_globals, self._get_frame_locals(frame))
         frame.f_locals.setdefault("__dbge_forced", []).append(obj)  # We force a ref to avoid obj to be garbaged collected
         frame_access.change_topstack(frame, obj)
-        print(f"New top stack:        {frame_access.peek_topstack(frame)}")
+        print(f"New top stack:        {self.get_tos(frame)}")
         return
 
     def stop_bytecode_here(self, frame):
@@ -198,7 +215,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         if not arg:
             arg = '_topstack'
         frame = self.curframe
-        topstack = frame_access.peek_topstack(frame)
+        topstack = self.get_tos(frame)
         frame.f_globals[arg] = topstack
 
     def do_until_expr(self, arg):
