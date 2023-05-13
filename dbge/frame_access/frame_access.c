@@ -47,6 +47,7 @@ static PyObject *frame_stack_at(PyObject *self, PyObject *args)
         return NULL;
     }
     PyObject *res = STACK_AT(frame, index);
+    // Py_XINCREF(res);
     return !res ? Py_BuildValue("") : res;
 }
 
@@ -60,8 +61,15 @@ static PyObject *frame_peek_topstack(PyObject *self, PyObject *pyframe)
 {
     PyFrameObject *frame = (PyFrameObject *)pyframe;
     PyObject *res = STACKTOP(frame);
+    // Py_XINCREF(res);  // This probably introduces a memory leak
     return !res ? Py_BuildValue("") : res;
 }
+
+// static PyObject *frame_decrease(PyObject *self, PyObject *obj)
+// {
+//     Py_XDECREF(obj);
+//     return Py_BuildValue("");
+// }
 
 static PyObject *frame_change_topstack(PyObject *self, PyObject *args)
 {
@@ -79,6 +87,7 @@ static PyMethodDef frame_access_methods[] = {
     {"stack_at", frame_stack_at, METH_VARARGS, "Returns internal frame stack index."},
     {"topstack", frame_topstack, METH_O, "Returns the stack top value of the internal frame."},
     {"peek_topstack", frame_peek_topstack, METH_O, "Returns the value at the internal frame stack top."},
+    // {"decrease", frame_decrease, METH_O, "Release the stack top."},
     {"change_topstack", frame_change_topstack, METH_VARARGS, "Alter the top of the internal frame stack."},
     {NULL, NULL, 0, NULL}
 };

@@ -1,5 +1,6 @@
 import ast
 import dis
+import gc
 import inspect
 import sys
 
@@ -22,9 +23,25 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.curbytecode = None
         self.stopbytecodeno = -1
         self.framea2b = {}
-        self.forced = None
+        self.forced = {}
         self.codeobj_registry = {}
         self.exprbreakpoints = []
+
+    # Copy/modified from Bdb
+    def set_continue(self):
+        """Stop only at breakpoints or when finished.
+
+        If there are no breakpoints, set the system trace function to None.
+        """
+        # Don't stop except at breakpoints or when finished
+        self._set_stopinfo(self.botframe, None, -1)
+        if not self.breaks and not self.exprbreakpoints and not self.framea2b.get(self.curframe):
+            # no breakpoints; run without debugger overhead
+            sys.settrace(None)
+            frame = sys._getframe().f_back
+            while frame and frame is not self.botframe:
+                del frame.f_trace
+                frame = frame.f_back
 
     # Copy/modified from Pdb
     def set_trace(self, frame=None):
@@ -72,7 +89,11 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
-            print(f"Current stack top:       {frame_access.peek_topstack(frame)}")
+            tos = frame_access.peek_topstack(frame)
+            forced = self.forced.setdefault(frame, [])
+            if tos and tos not in forced :
+                forced.append(tos)
+            print(f"Current stack top:       {tos}")
             print(f"Next bytecode:           {bytecode.opcode} {bytecode.opname}\t(offset={bytecode.offset})")
             if bytecode.ast:
                 print(f"AST representation:      '{ast.unparse(bytecode.ast)}'")
@@ -104,25 +125,19 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
                 return True
         return False
 
-    def set_continue(self):
-        """Stop only at breakpoints or when finished.
-
-        If there are no breakpoints, set the system trace function to None.
-        """
-        # Don't stop except at breakpoints or when finished
-        self._set_stopinfo(self.botframe, None, -1)
-        if not self.breaks and not self.exprbreakpoints:
-            # no breakpoints; run without debugger overhead
-            sys.settrace(None)
-            frame = sys._getframe().f_back
-            while frame and frame is not self.botframe:
-                del frame.f_trace
-                frame = frame.f_back
-
     def user_call(self, frame, arg):
         frame.f_trace_opcodes = True  # Activate trace opcode in new frame
+        # frame.f_trace = self.trace_dispatch
         self.setup_frame_ast2bytecode(frame)
         super().user_call(frame, arg)
+
+    def dispatch_return(self, frame, arg):
+        # The frame exeuction is finished we clear forced values and frames
+        del self.framea2b[frame]
+        forced = self.forced.get(frame, [])
+        # self._get_frame_locals(frame).clear()
+        forced.clear() # The frame execution is finished, we clear all forced values
+        return super().dispatch_return(frame, arg)
 
     def _set_stopinfo_bytecode(self, stopframe, returnframe, offset_stop=0):
         self.stopframe = stopframe
@@ -132,10 +147,11 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.stoplineno = -1
 
     def do_stepi(self, arg):
+        frame = self.curframe
         index = 0
         if arg:
-            index = int(arg) + self.curframe.f_lasti
-        self._set_stopinfo_bytecode(self.curframe, None, offset_stop=index)
+            index = int(arg) + frame.f_lasti
+        self._set_stopinfo_bytecode(frame, None, offset_stop=index)
         return 1
 
     def do_stepe(self, arg):
@@ -149,12 +165,12 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         if not arg:
             print("Missing argument")
             return
-        obj = eval(arg, self.curframe.f_globals, self.curframe.f_locals)
-        self.curframe.f_globals['__eval__'] = obj  # Make a strong ref to the object
-        self.forced = obj  # Make a strong ref to the object
-        print(f"Replace top stack:    {frame_access.peek_topstack(self.curframe)}")
-        frame_access.change_topstack(self.curframe, obj)
-        print(f"New top stack:        {frame_access.peek_topstack(self.curframe)}")
+        frame = self.curframe
+        print(f"Replace top stack:    {frame_access.peek_topstack(frame)}")
+        obj = eval(arg, frame.f_globals, self._get_frame_locals(frame))
+        frame.f_locals.setdefault("__dbge_forced", []).append(obj)  # We force a ref to avoid obj to be garbaged collected
+        frame_access.change_topstack(frame, obj)
+        print(f"New top stack:        {frame_access.peek_topstack(frame)}")
         return
 
     def stop_bytecode_here(self, frame):
@@ -215,7 +231,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             mode = "both"
         frame = self.curframe
         obj, attr = str_expr.rsplit(".", maxsplit=1)
-        resolved = eval(obj, frame.f_globals, frame.f_locals)
+        resolved = eval(obj, frame.f_globals, self._get_frame_locals(frame))
 
         return resolved, attr, bpoint_class(resolved, attr, mode=mode), mode
 

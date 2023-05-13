@@ -1,3 +1,10 @@
+import sys
+
+class Useless:
+    def __del__(self):
+        print('destroyed!', self)
+
+
 class A(object):
     def __init__(self, name, x):
         self.name = name
@@ -8,9 +15,11 @@ class A(object):
         return c
 
     def foo(self):
+        u = Useless()
         self.x = 55
         self.name = 44
         print(self.name)
+        return 55
 
 
 def example(ainst):
@@ -34,8 +43,11 @@ a1 = A("a1", 55)
 a2 = A("a2", 100)
 
 import dbge; dbge.set_trace()
+# import ipdb; ipdb.set_trace()
+
 
 a1.foo()
+
 
 print("Result 1", a1.compute(a2))
 print("Result 2", a2.compute(a2))
