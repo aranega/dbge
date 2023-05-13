@@ -7,37 +7,48 @@
     #include <internal/pycore_frame.h>
     #define STACK(o) (o->f_frame->localsplus)
     #define STACKTOP_IDX(o) (o->f_frame->stacktop)
-    #define STACKTOP(o) (STACK(o)[STACKTOP_IDX(o) - 1])
+    #define TOS(o) (STACK(o)[STACKTOP_IDX(o) - 1])
     #define STACK_AT(o, i) (STACK(o)[i])
 
 // #elif PY_MINOR_VERSION == 10
 //     #include <pyframe.h>
 //     #define STACK(o) (o->f_valuestack)
 //     #define STACKTOP_IDX(o) (o->f_stackdepth)
-//     #define STACKTOP(o) (STACK(o)[STACKTOP_IDX(o) - 1])
+//     #define TOS(o) (STACK(o)[STACKTOP_IDX(o) - 1])
 //     #define STACK_AT(o, i) (STACK(o)[i])
 
 // #elif PY_MINOR_VERSION == 9
 //     #include <frameobject.h>
 //     #define STACK(o) (*o->f_valuestack)
-//     #define STACKTOP(o) (*o->f_stacktop)
+//     #define TOS(o) (*o->f_stacktop)
 //     #define STACKTOP_IDX(o) (o->f_stacktop - o->f_valuestack)
 //     #define STACK_AT(o, i) (o->f_valuestack[i])
 
 // #elif PY_MINOR_VERSION == 8
 //     #define STACK(o) (o->f_valuestack)
-//     #define STACKTOP(o) (o->f_stacktop)
-//     #define STACKTOP_IDX(o) (STACKTOP(o) - STACK(o))
+//     #define TOS(o) (o->f_stacktop)
+//     #define STACKTOP_IDX(o) (TOS(o) - STACK(o))
 //     #define STACK_AT(o, i) (STACK(o)[i])
 
 // #elif PY_MINOR_VERSION == 7
 //     #define STACK(o) (o->f_valuestack)
-//     #define STACKTOP(o) (o->f_stacktop)
-//     #define STACKTOP_IDX(o) (STACKTOP(o) - STACK(o))
+//     #define TOS(o) (o->f_stacktop)
+//     #define STACKTOP_IDX(o) (TOS(o) - STACK(o))
 //     #define STACK_AT(o, i) (STACK(o)[i])
 
 #endif
 #endif
+
+static inline PyObject * convert_weak(PyObject *obj)
+{
+    if (obj == NULL) {
+        // return Py_BuildValue("s", "(nil)");
+        return Py_BuildValue("");
+    }
+    PyObject *weakref = PyWeakref_NewRef(obj, NULL);
+    PyErr_Clear();
+    return weakref == NULL ? obj : weakref;
+}
 
 static PyObject *frame_stack_at(PyObject *self, PyObject *args)
 {
@@ -46,9 +57,7 @@ static PyObject *frame_stack_at(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "Oi", &frame, &index)) {
         return NULL;
     }
-    PyObject *res = STACK_AT(frame, index);
-    // Py_XINCREF(res);
-    return !res ? Py_BuildValue("") : res;
+    return convert_weak(STACK_AT(frame, index));
 }
 
 static PyObject *frame_topstack(PyObject *self, PyObject *pyframe)
@@ -60,22 +69,9 @@ static PyObject *frame_topstack(PyObject *self, PyObject *pyframe)
 static PyObject *frame_peek_topstack(PyObject *self, PyObject *pyframe)
 {
     PyFrameObject *frame = (PyFrameObject *)pyframe;
-    PyObject *res = STACKTOP(frame);
-    // Py_XINCREF(res);  // This probably introduces a memory leak
-    if (res == NULL) {
-        return Py_BuildValue("s", "(nil)");
-    }
-    PyObject *weakref = PyWeakref_NewRef(res, NULL);
-    PyErr_Clear();
-    return weakref == NULL ? res : weakref;
-    // return !res ? Py_BuildValue("") : res;
+    PyObject *res = TOS(frame);
+    return convert_weak(res);
 }
-
-// static PyObject *frame_decrease(PyObject *self, PyObject *obj)
-// {
-//     Py_XDECREF(obj);
-//     return Py_BuildValue("");
-// }
 
 static PyObject *frame_change_topstack(PyObject *self, PyObject *args)
 {
@@ -84,15 +80,15 @@ static PyObject *frame_change_topstack(PyObject *self, PyObject *args)
     if (!PyArg_ParseTuple(args, "OO", &frame, &value)) {
         return NULL;
     }
-    STACKTOP(frame) = value;
+    TOS(frame) = value;
     return value;
 }
 
 // Defines the methods of the extension
 static PyMethodDef frame_access_methods[] = {
-    {"stack_at", frame_stack_at, METH_VARARGS, "Returns internal frame stack index."},
-    {"topstack", frame_topstack, METH_O, "Returns the stack top value of the internal frame."},
-    {"peek_topstack", frame_peek_topstack, METH_O, "Returns the value at the internal frame stack top."},
+    {"stack_at", frame_stack_at, METH_VARARGS, "Returns a weakref (if possible) towards the value at an index in the internal frame stack. If the value at the index is not weakreferenceable, the actual value is returned."},
+    {"topstack", frame_topstack, METH_O, "Returns a the stack top value of the internal frame."},
+    {"peek_topstack", frame_peek_topstack, METH_O, "Returns a weak reference (if possible) towards the TOS (Top Of the Stack) of the internal evaluation stack. If the TOS is not weakreferenceable, the actual TOS is returned."},
     // {"decrease", frame_decrease, METH_O, "Release the stack top."},
     {"change_topstack", frame_change_topstack, METH_VARARGS, "Alter the top of the internal frame stack."},
     {NULL, NULL, 0, NULL}
