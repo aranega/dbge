@@ -4,16 +4,14 @@ import dis
 import gc
 import inspect
 import sys
+import weakref
 
 import ipdb
 
 from .ast2bytecode import AST2Bytecode
-from .breakpoints import (AttributeReadBreakpoint, AttributeWriteBreakpoint,
-                          ExpressionBreakpoint)
+from .breakpoints import ExpressionBreakpoint, OCAttributeAccessBreakpoint
 from .frame_access import frame_access
 from .interactive import select_astnode
-
-import weakref
 
 
 def set_trace():
@@ -108,9 +106,10 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
     def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
             # fcode = frame.f_code
-            # size = fcode.co_stacksize + fcode.co_nlocals
-            # for i in range(size - 1, -1, -1):
-            #     arrow = "-->" if i == frame_access.topstack(frame) else "   "
+            # ts = frame_access.topstack(frame) - 1
+            # size = max(fcode.co_stacksize, ts)
+            # for i in range(size, -1, -1):
+            #     arrow = "-->" if i == ts else "   "
             #     val = frame_access.stack_at(frame, i)
             #     dealoc = " "
             #     if isinstance(val, weakref.ReferenceType):
@@ -232,30 +231,6 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self._set_stopinfo_bytecode(frame, None, offset_stop=bc.offset)
         return 1
 
-    def _attribute_bp(self, frame, str_expr, bpoint_class):
-        # refactor me
-        if not str_expr:
-            print("!! an expression with the form <expr>.attr is expected")
-            return (None, None, None, None)
-        if "." not in str_expr:
-            print("!! an expression with the form <expr>.attr is expected")
-            return None
-        if ":" in str_expr:
-            args = [s.strip() for s in str_expr.split(":") if s]
-            if len(args) != 2:
-                print("!! mode or expression is missing.\n"
-                      "The argument must have the form <mode>:<expr>.attr\n"
-                      "Were <mode> is 'both' or 'b', 'internal' or 'i', 'external' or 'e'")
-                return (None, None, None, None)
-            mode, str_expr = args
-        else:
-            mode = "both"
-        frame = self.curframe
-        obj, attr = str_expr.rsplit(".", maxsplit=1)
-        resolved = eval(obj, frame.f_globals, self._get_frame_locals(frame))
-
-        return resolved, attr, bpoint_class(resolved, attr, mode=mode), mode
-
     def do_be(self, arg):
         if not arg:
             print("!! an expression towards the function or the method to stop to is required")
@@ -281,15 +256,41 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         return 0
 
     def do_breakattributewrite(self, arg):
-        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, AttributeWriteBreakpoint)
+        # refactor me
+        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, "write")
         if breakpoint:
             self.exprbreakpoints.append(breakpoint)
             print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] breaks on attribute write for {resolved}.{attr} <mode={mode}>")
         return 0
 
     def do_breakattributeread(self, arg):
-        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, AttributeReadBreakpoint)
+        # refactor me
+        resolved, attr, breakpoint, mode = self._attribute_bp(self.curframe, arg, "read")
         if breakpoint:
             self.exprbreakpoints.append(breakpoint)
             print(f"Breakpoint [{len(self.exprbreakpoints) - 1}] breaks on attribute read for {resolved}.{attr} <mode={mode}>")
         return 0
+
+    def _attribute_bp(self, frame, str_expr, bp_type):
+        # refactor me
+        if not str_expr:
+            print("!! an expression with the form <expr>.attr is expected")
+            return (None, None, None, None)
+        if "." not in str_expr:
+            print("!! an expression with the form <expr>.attr is expected")
+            return None
+        if ":" in str_expr:
+            args = [s.strip() for s in str_expr.split(":") if s]
+            if len(args) != 2:
+                print("!! mode or expression is missing.\n"
+                      "The argument must have the form <mode>:<expr>.attr\n"
+                      "Were <mode> is 'both' or 'b', 'internal' or 'i', 'external' or 'e'")
+                return (None, None, None, None)
+            mode, str_expr = args
+        else:
+            mode = "both"
+        frame = self.curframe
+        obj, attr = str_expr.rsplit(".", maxsplit=1)
+        resolved = eval(obj, frame.f_globals, self._get_frame_locals(frame))
+
+        return resolved, attr, OCAttributeAccessBreakpoint(bp_type, resolved, attr, mode=mode), mode

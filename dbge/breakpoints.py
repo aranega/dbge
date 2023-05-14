@@ -1,6 +1,6 @@
 import dis
-from multiprocessing import context
 import weakref
+from multiprocessing import context
 
 from .ast2bytecode import AST2Bytecode
 from .frame_access import frame_access
@@ -46,18 +46,29 @@ class BytecodeBasedBreakpoint(object):
         self.opname = opname
         self.instance = instance
 
-
-class AttributeBasedBreakpoint(BytecodeBasedBreakpoint):
-    def __init__(self, opname, instance, attribute, mode):
-        super().__init__(opname, instance)
-        self.attribute = attribute
-        self.mode = mode
-
     def should_break(self, frame):
         for inst in dis.get_instructions(frame.f_code):
             if inst.opname == self.opname:
                 return True
         return False
+
+    def break_here(self, frame, bc: dis.Instruction):
+        # Check first the bytecode opname
+        if bc.opname != self.opname:
+            return False
+        return True
+
+
+class OCAttributeAccessBreakpoint(BytecodeBasedBreakpoint):
+    def __init__(self, kind, instance, attribute, mode="both"):
+        if kind == 'read':
+            opname = "LOAD_ATTR"
+        else:
+            opname = "STORE_ATTR"
+        super().__init__(opname, instance)
+        self.attribute = attribute
+        self.mode = mode
+
 
     def break_here(self, frame, bc: dis.Instruction):
         # Check first the bytecode opname
@@ -69,13 +80,6 @@ class AttributeBasedBreakpoint(BytecodeBasedBreakpoint):
             return False
 
         if self.mode != 'both':
-            # If internal or external access only must be considered
-            # We get the current object
-            # self_name = codeobj.co_varnames[0] if codeobj.co_argcount > 0 else ""
-            # context_of = frame.f_locals.get(self_name, None)
-            # context_ok = ((self.mode in ('internal', 'i') and context_of is self.instance) or
-            #               (self.mode in ('external', 'e') and context_of is not self.instance))
-
             codeobj = frame.f_code
 
             # We build the potential full qual name of the current function/method
@@ -102,12 +106,3 @@ class AttributeBasedBreakpoint(BytecodeBasedBreakpoint):
             tos = tos()
         return context_ok and self.instance is tos
 
-
-class AttributeWriteBreakpoint(AttributeBasedBreakpoint):
-    def __init__(self, instance, attribute, mode="both"):
-        super().__init__("STORE_ATTR", instance, attribute, mode)
-
-
-class AttributeReadBreakpoint(AttributeBasedBreakpoint):
-    def __init__(self, instance, attribute, mode="both"):
-        super().__init__("LOAD_ATTR", instance, attribute, mode)
