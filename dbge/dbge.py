@@ -1,4 +1,5 @@
 import ast
+import code
 import dis
 import gc
 import inspect
@@ -24,8 +25,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         super().__init__(*args, **kwargs)
         self.curbytecode = None
         self.stopbytecodeno = -1
-        self.framea2b = {}
-        self.forced = {}
+        self.code_mapper = {}
         self.codeobj_registry = {}
         self.exprbreakpoints = []
 
@@ -43,7 +43,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         """
         # Don't stop except at breakpoints or when finished
         self._set_stopinfo(self.botframe, None, -1)
-        if not self.breaks and not self.exprbreakpoints and False:
+        if not self.breaks and not self.exprbreakpoints:
             # no breakpoints; run without debugger overhead
             sys.settrace(None)
             frame = sys._getframe().f_back
@@ -89,7 +89,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         return super().trace_dispatch(frame, event, arg)
 
     def dispatch_opcode(self, frame):
-        a2b: AST2Bytecode = self.framea2b[frame]
+        a2b: AST2Bytecode = self.code_mapper[frame.f_code]
         bytecode = a2b.get_bytecode(offset=frame.f_lasti)
         self.curbytecode = bytecode
         self.user_opcode(frame, bytecode)
@@ -98,9 +98,6 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
     def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
             tos_ref = frame_access.peek_topstack(frame)
-            # forced = self.forced.setdefault(frame, [])
-            # if tos and tos not in forced :
-            #     forced.append(tos)
             if isinstance(tos_ref, weakref.ReferenceType):
                 tos = tos_ref()
                 if tos is None:
@@ -141,16 +138,12 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def user_call(self, frame, arg):
         frame.f_trace_opcodes = True  # Activate trace opcode in new frame
-        # frame.f_trace = self.trace_dispatch
         self.setup_frame_ast2bytecode(frame)
-        # weakref.finalize(frame, self.remove_mapper_entry, frame)
         super().user_call(frame, arg)
 
     def remove_mapper_entry(self, frame):
         # The frame exeuction is finished we clear forced values and frames
-        del self.framea2b[frame]
-        self.forced.get(frame, []).clear()
-        self.curframe_locals.clear()
+        self.curframe_locals.clear()  # Some locals are held there, not sure yet why
 
     def dispatch_return(self, frame, arg):
         self.remove_mapper_entry(frame)
@@ -173,7 +166,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def do_stepe(self, arg):
         frame = self.curframe
-        a2b: AST2Bytecode = self.framea2b[frame]
+        a2b: AST2Bytecode = self.code_mapper[frame.f_code]
         stop_offset = a2b.resolve_end_offset(frame.f_lasti)
         self._set_stopinfo_bytecode(self.curframe, None, offset_stop=stop_offset)
         return 1
@@ -209,7 +202,8 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         return a2b
 
     def setup_frame_ast2bytecode(self, frame):
-        self.framea2b[frame] = self.setup_ast2bytecode(frame.f_code)
+        codeobj = frame.f_code
+        self.code_mapper[codeobj] = self.setup_ast2bytecode(codeobj)
 
     def do_capturetopstack(self, arg):
         if not arg:
@@ -220,7 +214,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def do_until_expr(self, arg):
         frame = self.curframe
-        a2b = self.framea2b[frame]
+        a2b = self.code_mapper[frame.f_code]
         node, bc, _ = select_astnode(a2b)
         if not node:
             return 0
