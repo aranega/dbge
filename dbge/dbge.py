@@ -107,13 +107,23 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def user_opcode(self, frame, bytecode: dis.Instruction):
         if self.stopbytecodeno >= 0:
-            tos_ref = frame_access.peek_topstack(frame)
-            if isinstance(tos_ref, weakref.ReferenceType):
-                tos = tos_ref()
+            # fcode = frame.f_code
+            # size = fcode.co_stacksize + fcode.co_nlocals
+            # for i in range(size - 1, -1, -1):
+            #     arrow = "-->" if i == frame_access.topstack(frame) else "   "
+            #     val = frame_access.stack_at(frame, i)
+            #     dealoc = " "
+            #     if isinstance(val, weakref.ReferenceType):
+            #         val = val()
+            #         if val is None:
+            #             dealoc = "X"
+            #             val = "Value deallocated"
+            #     print(f"{arrow} {dealoc} {i}:  {val}")
+            tos = frame_access.peek_topstack(frame)
+            if isinstance(tos, weakref.ReferenceType):
+                tos = tos()
                 if tos is None:
                     print("TOS deallocated")
-            else:
-                tos = tos_ref
             print(f"Current stack top:       {tos}")
             print(f"Next bytecode:           {bytecode.opcode} {bytecode.opname}\t(offset={bytecode.offset})")
             if bytecode.ast:
@@ -252,13 +262,14 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             return 0
 
         frame = self.curframe
+        locals = self._get_frame_locals(frame)
         if "." in arg:
             obj, attr = arg.rsplit(".", maxsplit=1)
-            obj = eval(obj, frame.f_globals, frame.f_locals)
+            obj = eval(obj, frame.f_globals, locals)
             resolved = getattr(obj, attr)
         else:
             obj = None
-            resolved = eval(arg, frame.f_globals, frame.f_locals)
+            resolved = eval(arg, frame.f_globals, locals)
         codeobj = resolved.__code__
 
         from_a2b = self.setup_ast2bytecode(codeobj)
