@@ -81,6 +81,15 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             line = f"{line[:start]}<{line[start: end]}>{line[end:]}"
         return super()._Pdb__format_line(tpl_line, filename, lineno, line, arrow)
 
+    def setup_ast2bytecode(self, codeobj):
+        a2b = self.code_mapper.get(codeobj)
+        if not a2b:
+            a2b = AST2Bytecode(codeobj)
+            for m in a2b.all_a2b():
+                self.code_mapper[m.codeobj] = m
+        return a2b
+
+    ## dispatch section
     # Extends trace function to listen to opcode events
     def trace_dispatch(self, frame, event, arg):
         if self.quitting:
@@ -116,6 +125,21 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             if breakpoint.break_here(frame, bytecode):
                 self.interaction(frame, None)
 
+    def user_call(self, frame, arg):
+        frame.f_trace_opcodes = True  # Activate trace opcode in new frame
+        self.setup_ast2bytecode(frame.f_code)
+        super().user_call(frame, arg)
+
+    def remove_mapper_entry(self, frame):
+        # The frame exeuction is finished we clear forced values and frames
+        self.curframe_locals.clear()  # Some locals are held there, not sure yet why
+
+    def dispatch_return(self, frame, arg):
+        # self.remove_mapper_entry(frame)
+        return super().dispatch_return(frame, arg)
+
+    ## End dispatch section
+
     def break_here(self, frame):
         br = super().break_here(frame)
         if br:
@@ -136,19 +160,6 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             if breakpoint.should_break(frame):
                 return True
         return False
-
-    def user_call(self, frame, arg):
-        frame.f_trace_opcodes = True  # Activate trace opcode in new frame
-        self.setup_ast2bytecode(frame.f_code)
-        super().user_call(frame, arg)
-
-    def remove_mapper_entry(self, frame):
-        # The frame exeuction is finished we clear forced values and frames
-        self.curframe_locals.clear()  # Some locals are held there, not sure yet why
-
-    def dispatch_return(self, frame, arg):
-        # self.remove_mapper_entry(frame)
-        return super().dispatch_return(frame, arg)
 
     def _set_stopinfo_bytecode(self, stopframe, returnframe, offset_stop=0):
         self.stopframe = stopframe
@@ -193,14 +204,6 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
                 return False
             return frame.f_lasti >= self.stopbytecodeno
         return False
-
-    def setup_ast2bytecode(self, codeobj):
-        a2b = self.code_mapper.get(codeobj)
-        if not a2b:
-            a2b = AST2Bytecode(codeobj)
-            for m in a2b.all_a2b():
-                self.code_mapper[m.codeobj] = m
-        return a2b
 
     def do_capturetopstack(self, arg):
         if not arg:
