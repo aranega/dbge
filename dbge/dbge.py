@@ -25,7 +25,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         super().__init__(*args, **kwargs)
         self.curbytecode = None
         self.stopbytecodeno = -1
-        self.code_mapper = {}
+        self.code_mapper = weakref.WeakKeyDictionary()
         self.exprbreakpoints = []
 
     def get_tos(self, frame):
@@ -42,7 +42,9 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         """
         # Don't stop except at breakpoints or when finished
         self._set_stopinfo(self.botframe, None, -1)
-        if not self.breaks and not self.exprbreakpoints:
+
+        # Patch to avoid a change in behavior because of "curframe_locals" (?)
+        if not self.breaks and not self.exprbreakpoints and not self.curframe_locals:
             # no breakpoints; run without debugger overhead
             sys.settrace(None)
             frame = sys._getframe().f_back
