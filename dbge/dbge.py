@@ -26,7 +26,6 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.curbytecode = None
         self.stopbytecodeno = -1
         self.code_mapper = {}
-        self.codeobj_registry = {}
         self.exprbreakpoints = []
 
     def get_tos(self, frame):
@@ -61,7 +60,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
             frame = sys._getframe().f_back
         self.reset()
 
-        self.setup_frame_ast2bytecode(frame)
+        self.setup_ast2bytecode(frame.f_code)
 
         while frame:
             frame.f_trace = self.trace_dispatch
@@ -138,7 +137,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
 
     def user_call(self, frame, arg):
         frame.f_trace_opcodes = True  # Activate trace opcode in new frame
-        self.setup_frame_ast2bytecode(frame)
+        self.setup_ast2bytecode(frame.f_code)
         super().user_call(frame, arg)
 
     def remove_mapper_entry(self, frame):
@@ -194,16 +193,12 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         return False
 
     def setup_ast2bytecode(self, codeobj):
-        a2b = self.codeobj_registry.get(codeobj)
+        a2b = self.code_mapper.get(codeobj)
         if not a2b:
             a2b = AST2Bytecode(codeobj)
             for m in a2b.all_a2b():
-                self.codeobj_registry[m.codeobj] = m
+                self.code_mapper[m.codeobj] = m
         return a2b
-
-    def setup_frame_ast2bytecode(self, frame):
-        codeobj = frame.f_code
-        self.code_mapper[codeobj] = self.setup_ast2bytecode(codeobj)
 
     def do_capturetopstack(self, arg):
         if not arg:
