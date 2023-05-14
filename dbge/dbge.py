@@ -44,7 +44,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self._set_stopinfo(self.botframe, None, -1)
 
         # Patch to avoid a change in behavior because of "curframe_locals" (?)
-        if not self.breaks and not self.exprbreakpoints and not self.curframe_locals:
+        if not self.breaks and not self.exprbreakpoints: # and not self.curframe_locals:
             # no breakpoints; run without debugger overhead
             sys.settrace(None)
             frame = sys._getframe().f_back
@@ -147,7 +147,7 @@ class DbgE(ipdb.__main__._get_debugger_cls()):
         self.curframe_locals.clear()  # Some locals are held there, not sure yet why
 
     def dispatch_return(self, frame, arg):
-        self.remove_mapper_entry(frame)
+        # self.remove_mapper_entry(frame)
         return super().dispatch_return(frame, arg)
 
     def _set_stopinfo_bytecode(self, stopframe, returnframe, offset_stop=0):
